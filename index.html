@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- video.twimg.com は localhost からの Referer 付きリクエストを 403 で弾くので送らない -->
+<meta name="referrer" content="no-referrer">
+<title>ユーモア・スワイプ</title>
+<style>
+:root {
+  --bg: #f4f1ea; --card: #fffdf8; --ink: #1d1b18; --sub: #77706a; --line: #e2dcd0;
+  --no: #c44b3a; --yes: #2f8f5b; --meh: #8a8378; --humor: #6b4fbb; --humor-ink: #6b4fbb; --chip: #efe9dd;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --humor-ink: #b9a4ff; --bg: #171614; --card: #22201d; --ink: #eee9e0; --sub: #a29b91; --line: #3a3631; --chip: #2e2b27; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+header { width: min(560px, 100%); padding: 14px 16px 6px; display: flex; justify-content: space-between; align-items: baseline; }
+header h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
+#progress { font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums; }
+#bar { width: min(560px, calc(100% - 32px)); height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+#bar div { height: 100%; background: var(--ink); width: 0; transition: width .3s; }
+
+#stage { position: relative; width: min(560px, calc(100% - 24px)); flex: 1; min-height: 0; margin: 12px 0 8px; }
+.card { position: absolute; inset: 0; background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.08); overflow-y: auto; padding: 18px 18px 24px; touch-action: pan-y;
+  user-select: none; cursor: grab; will-change: transform; }
+.card.dragging { cursor: grabbing; transition: none; }
+.card.fly { transition: transform .35s ease-in, opacity .35s; }
+.card.back { transform: scale(.96) translateY(10px); filter: brightness(.97); pointer-events: none; }
+.who { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.who b { font-size: 15px; }
+.who span { color: var(--sub); font-size: 13px; }
+.text { white-space: pre-wrap; font-size: 18px; line-height: 1.65; word-break: break-word; }
+.media { display: grid; gap: 4px; margin-top: 12px; border-radius: 12px; overflow: hidden; }
+.media.n2, .media.n3, .media.n4 { grid-template-columns: 1fr 1fr; }
+.media img, .media video { width: 100%; max-height: 60vh; object-fit: contain; background: #000; display: block; pointer-events: auto; }
+.media.n2 img, .media.n3 img, .media.n4 img { height: 220px; object-fit: cover; }
+.quoted { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 12px; }
+.quoted .text { font-size: 15px; }
+.stamp { position: absolute; top: 22px; padding: 4px 12px; border: 3px solid; border-radius: 8px; font-weight: 800;
+  font-size: 22px; opacity: 0; transform: rotate(-12deg); pointer-events: none; }
+.stamp.yes { left: 20px; color: var(--yes); } .stamp.no { right: 20px; color: var(--no); transform: rotate(12deg); }
+.stamp.meh { left: 50%; translate: -50% 0; color: var(--meh); transform: none; }
+
+#panel { width: min(560px, 100%); padding: 0 12px 12px; }
+#chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px;
+  padding: 5px 11px; font-size: 13px; cursor: pointer; }
+.chip.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+#humor { width: 100%; margin-bottom: 8px; padding: 10px 12px; border-radius: 10px; border: 2px solid var(--humor-ink);
+  background: transparent; color: var(--humor-ink); font-size: 15px; font-weight: 700; cursor: pointer; }
+#humor.on { border: 2px solid var(--humor); background: var(--humor); color: #fff; font-weight: 700; }
+#note { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
+  color: var(--ink); font-size: 15px; font-family: inherit; }
+#btns { display: flex; justify-content: center; gap: 14px; margin-top: 10px; }
+#btns button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid var(--line); background: var(--card);
+  font-size: 22px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06); color: var(--ink); }
+#btns button small { display: block; font-size: 12px; color: var(--sub); margin-top: -2px; }
+#btns .no { color: var(--no); } #btns .yes { color: var(--yes); } #btns .meh { color: var(--meh); }
+#btns .undo { width: 44px; height: 44px; align-self: center; font-size: 16px; }
+.keys { text-align: center; font-size: 12px; color: var(--sub); margin-top: 6px; }
+
+#toast { position: fixed; top: 54px; left: 50%; translate: -50% 0; background: var(--ink); color: var(--card);
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 9; max-width: 90vw; }
+#toast.show { opacity: .92; }
+#add { display: flex; gap: 6px; margin-top: 10px; }
+#add input { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; }
+#add button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); font-size: 13px; cursor: pointer; }
+.done { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--sub); line-height: 1.8; }
+</style>
+</head>
+<body>
+<header><h1>ユーモア・スワイプ</h1><span id="progress"></span></header>
+<div id="bar"><div></div></div>
+<div id="stage"></div>
+<div id="panel">
+  <button id="humor" title="面白さとは別に、誰かが意図して作った笑いかどうか (H)">✦ ユーモア（誰かが意図して作った笑い）— H</button>
+  <div id="chips"></div>
+  <input id="note" placeholder="理由（任意）— 書いてからスワイプ。Enterで入力を抜ける" autocomplete="off">
+  <div id="btns">
+    <button class="undo" data-v="undo" title="戻す (Z)">↶</button>
+    <button class="no" data-v="no">✕<small>面白くない</small></button>
+    <button class="meh" data-v="meh">−<small>普通</small></button>
+    <button class="yes" data-v="yes">♥<small>面白い</small></button>
+    <button class="undo" data-v="redo" title="進む (Shift+Z)">↷</button>
+  </div>
+  <div class="keys">← 面白くない　↑↓ 普通　→ 面白い　Z 戻す　Shift+Z 進む　H ユーモア　1-9 理由チップ</div>
+  <form id="add"><input name="url" placeholder="自分が面白いと思うポストのURLを追加"><button>追加</button></form>
+</div>
+<div id="toast"></div>
+
+<script>
+const REASONS = [
+  // 第1回スワイプでユーザーが自由記述に使った言葉に合わせている（分析.md）
+  "意外性", "ワードセンス", "反転が効いてる", "本人のユーモア", "誰かの返しが良い",
+  "報告でしかない", "やってるだけ", "既視感", "内輪ノリ",
+  "かわいいだけ", "説明しすぎ", "狙いすぎ", "不快", "意味がわからない",
+];
+const LABEL = { yes: "面白い", meh: "普通", no: "面白くない", lol: "爆笑", skip: "わからない" };  // lol/skip は4択だった頃の記録用
+let posts = [], swipes = [], queue = [], shownAt = 0;
+let redoStack = [];  // 戻したスワイプ。新しくスワイプしたら捨てる
+const $ = s => document.querySelector(s);
+const stage = $("#stage"), note = $("#note"), humorBtn = $("#humor");
+// 面白さ（3択）とは独立に「学ばせたいユーモアか」を記録する（分析.md 第1回の区別）
+humorBtn.onclick = () => humorBtn.classList.toggle("on");
+
+const chips = $("#chips");
+REASONS.forEach((r, i) => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.textContent = (i < 9 ? `${i + 1} ` : "") + r; b.dataset.r = r;
+  b.onclick = () => b.classList.toggle("on");
+  chips.appendChild(b);
+});
+
+function fmt(n) { return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, "") + "万" : n.toLocaleString(); }
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// GitHub Pages では手元の画像が無いので、data-gh に kabeuchi 内のパスを持たせて hydrate() で読み込む
+function local(attr, path) { return GH ? `data-gh-${attr}="${path}"` : `${attr}="/${path}"`; }
+
+function mediaHTML(media) {
+  if (!media || !media.length) return "";
+  const items = media.map(m => m.type === "photo"
+    ? `<img ${local("src", m.src)} loading="lazy" draggable="false">`
+    : `<video ${/^https?:/.test(m.src) ? `src="${m.src}"` : local("src", m.src)} ${local("poster", m.poster)} ${m.type === "animated_gif" ? "autoplay loop muted" : "controls"} playsinline preload="metadata"></video>`).join("");
+  return `<div class="media n${media.length}">${items}</div>`;
+}
+
+function cardHTML(p) {
+  const q = p.quoted ? `<div class="quoted"><div class="who"><b>${esc(p.quoted.author)}</b><span>@${esc(p.quoted.handle)}</span></div>
+    <div class="text">${esc(p.quoted.text)}</div>${mediaHTML(p.quoted.media)}</div>` : "";
+  return `<div class="who"><b>${esc(p.author)}</b><span>@${esc(p.handle)}</span></div>
+    <div class="text">${esc(p.text)}</div>${mediaHTML(p.media)}${q}
+    <div class="stamp yes">面白い</div><div class="stamp no">面白くない</div><div class="stamp meh">普通</div>`;
+}
+
+function render() {
+  stage.innerHTML = "";
+  const done = posts.length - queue.length;
+  $("#progress").textContent = `${done} / ${posts.length}`;
+  $("#bar div").style.width = posts.length ? `${done / posts.length * 100}%` : 0;
+  if (!queue.length) {
+    stage.innerHTML = `<div class="done">${posts.length ? "全部スワイプしました。<br>Claude に「スワイプ終わった」と伝えてください。" : "まだポストがありません。<br>下の欄からURLを追加できます。"}</div>`;
+    return;
+  }
+  queue.slice(0, 2).reverse().forEach((p, i, arr) => {
+    const el = document.createElement("div");
+    el.className = "card" + (i === arr.length - 1 ? "" : " back");
+    el.innerHTML = cardHTML(p);
+    stage.appendChild(el);
+  });
+  const top = stage.lastElementChild;
+  bindDrag(top);
+  shownAt = performance.now();
+  if (GH) {
+    hydrate(stage);
+    // 次の数枚の画像も先に取っておく
+    queue.slice(2, 5).forEach(p => [...(p.media || []), ...(p.quoted?.media || [])]
+      .forEach(m => [m.src, m.poster].forEach(s => s && !/^https?:/.test(s) && ghBlob(s))));
+  }
+}
+
+function bindDrag(el) {
+  let sx, sy, dx = 0, dy = 0, active = false;
+  el.addEventListener("pointerdown", e => {
+    if (e.target.closest("video")) return;
+    active = true; sx = e.clientX; sy = e.clientY; dx = dy = 0;
+    el.classList.add("dragging"); el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener("pointermove", e => {
+    if (!active) return;
+    dx = e.clientX - sx; dy = e.clientY - sy;
+    el.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 20}deg)`;
+    const v = verdictOf(dx, dy);
+    el.querySelectorAll(".stamp").forEach(s => s.style.opacity = s.classList.contains(v) ? Math.min(1, Math.max(Math.abs(dx), Math.abs(dy)) / 110) : 0);
+  });
+  const end = () => {
+    if (!active) return;
+    active = false; el.classList.remove("dragging");
+    const v = verdictOf(dx, dy);
+    if (v && Math.max(Math.abs(dx), Math.abs(dy)) > 110) decide(v);
+    else { el.style.transform = ""; el.querySelectorAll(".stamp").forEach(s => s.style.opacity = 0); }
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+
+function verdictOf(dx, dy) {
+  if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return null;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? "yes" : "no";
+  return "meh";
+}
+
+async function decide(v) {
+  if (!queue.length) return;
+  redoStack = [];
+  const p = queue.shift();
+  const el = stage.lastElementChild;
+  const reasons = [...chips.querySelectorAll(".chip.on")].map(c => c.dataset.r);
+  const rec = { id: p.id, verdict: v, humor: humorBtn.classList.contains("on"), reasons, note: note.value.trim(),
+               ms: Math.round(performance.now() - shownAt) };
+  const to = { yes: "translate(140%, 0) rotate(25deg)", no: "translate(-140%, 0) rotate(-25deg)",
+               meh: "translate(0, -140%)" }[v];
+  el.querySelectorAll("video").forEach(x => x.pause());
+  el.classList.add("fly"); el.style.transform = to; el.style.opacity = 0;
+  chips.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on"));
+  humorBtn.classList.remove("on");
+  note.value = "";
+  swipes.push(rec);
+  api.swipe(rec);
+  toast(`${LABEL[v]}${rec.humor ? "・ユーモア" : ""}　｜　世間 ♥ ${fmt(p.likes)}${p.slot === "rec" ? "　｜　Claudeのおすすめ枠" : ""}`);
+  setTimeout(render, 300);
+}
+
+async function undo() {
+  const undone = await api.undo();
+  if (!undone) return;
+  swipes.pop();
+  redoStack.push(undone);
+  const p = posts.find(x => x.id === undone.id);
+  if (p) queue.unshift(p);
+  render();
+  toast("ひとつ戻しました");
+}
+
+async function redo() {
+  const rec = redoStack.pop();
+  if (!rec) return toast("進めるものがありません");
+  delete rec.at;
+  queue = queue.filter(x => x.id !== rec.id);
+  swipes.push(rec);
+  await api.swipe(rec);
+  render();
+  toast(`進めました（${LABEL[rec.verdict]}${rec.note ? "・" + rec.note : ""}）`);
+}
+
+let tt;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1600); }
+
+$("#btns").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  b.dataset.v === "undo" ? undo() : b.dataset.v === "redo" ? redo() : decide(b.dataset.v);
+});
+// 日本語入力の変換確定の Enter（isComposing / keyCode 229）では抜けない。抜けると未確定の文字が二重に入る
+note.addEventListener("keydown", e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === "Enter" || e.key === "Escape") note.blur();
+});
+document.addEventListener("keydown", e => {
+  if (e.isComposing || e.keyCode === 229 || document.activeElement.tagName === "INPUT") return;
+  const map = { ArrowLeft: "no", ArrowRight: "yes", ArrowUp: "meh", ArrowDown: "meh" };
+  if (map[e.key]) { e.preventDefault(); decide(map[e.key]); }
+  else if (e.key === "Z") redo();
+  else if (e.key === "z" || e.key === "Backspace") undo();
+  else if (/^[1-9]$/.test(e.key)) chips.children[+e.key - 1]?.classList.toggle("on");
+  else if (e.key === "Enter") { e.preventDefault(); note.focus(); }
+  else if (e.key === "h" || e.key === "H") humorBtn.classList.toggle("on");
+});
+
+$("#add").addEventListener("submit", async e => {
+  e.preventDefault();
+  const url = e.target.url.value.trim(); if (!url) return;
+  if (GH) {
+    // ブラウザからはポストを取得できないので、URL を控えておき次のデッキを作るときに取り込む
+    toast("送信中…");
+    if (!await ghAppend("data/add_queue.txt", url + "\n")) return toast("送れませんでした");
+    e.target.url.value = "";
+    return toast("控えました（次のデッキの先頭に入ります）");
+  }
+  toast("取り込み中…");
+  const r = await fetch("/api/add", { method: "POST", body: JSON.stringify({ url }) }).then(r => r.json());
+  if (r.error) return toast(r.error);
+  e.target.url.value = "";
+  if (!posts.some(p => p.id === r.post.id)) { posts.push(r.post); queue.unshift(r.post); render(); }
+  toast("追加しました（いま一番上に出ています）");
+});
+
+// ---- 保存先 ----
+// 手元の server.py から開いたときはその API、GitHub Pages から開いたときは
+// 非公開の kabeuchi リポジトリを GitHub API で直接読み書きする（データは公開リポジトリに置かない）
+const GH = location.hostname.endsWith("github.io");
+const REPO = "Raico-lab/kabeuchi", BASE = "ユーモア/";
+const TOKEN_KEY = "humor-swipe-token";
+let token = "", swipesSha = null, saveTimer = null, saving = Promise.resolve(), dirty = false;
+const blobs = new Map();
+
+function stamp() { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 19); }
+function b64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function gh(path, opts = {}, accept = "application/vnd.github+json") {
+  const url = `https://api.github.com/repos/${REPO}/contents/${(BASE + path).split("/").map(encodeURIComponent).join("/")}`;
+  const r = await fetch(url, { cache: "no-store", ...opts,
+    headers: { Authorization: `Bearer ${token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28" } });
+  if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); askToken("トークンが無効です。もう一度入力してください"); throw new Error("401"); }
+  return r;
+}
+const ghRaw = path => gh(path, {}, "application/vnd.github.raw");
+async function ghSha(path) { const r = await gh(path); return r.ok ? (await r.json()).sha : null; }
+async function ghPut(path, text, sha, message) {
+  return gh(path, { method: "PUT", body: JSON.stringify({ message, content: b64(text), ...(sha ? { sha } : {}) }) });
+}
+async function ghAppend(path, line) {
+  const r = await ghRaw(path);
+  const old = r.ok ? await r.text() : "";
+  return (await ghPut(path, old + line, await ghSha(path), "humor swipe: add url")).ok;
+}
+function ghBlob(path) {
+  if (!blobs.has(path)) blobs.set(path, ghRaw(path).then(r => r.ok ? r.blob() : null).then(b => b && URL.createObjectURL(b)));
+  return blobs.get(path);
+}
+function hydrate(root) {
+  root.querySelectorAll("[data-gh-src],[data-gh-poster]").forEach(el => {
+    for (const attr of ["src", "poster"]) {
+      const path = el.dataset["gh" + attr[0].toUpperCase() + attr.slice(1)];
+      if (path) ghBlob(path).then(u => u && el.setAttribute(attr, u));
+    }
+  });
+}
+
+// スワイプのたびにコミットすると多すぎるので、手が止まって3秒たったら swipes.jsonl を丸ごと書き直す
+function scheduleSave() { dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(save, 3000); }
+function save() {
+  saving = saving.then(async () => {
+    if (!dirty) return;
+    dirty = false;
+    const text = swipes.map(r => JSON.stringify(r) + "\n").join("");
+    let r = await ghPut("data/swipes.jsonl", text, swipesSha, `humor swipe ${swipes.length}`);
+    if (r.status === 409 || r.status === 422) {  // 手元から push された直後など。最新の sha を取り直して上書きする
+      swipesSha = await ghSha("data/swipes.jsonl");
+      r = await ghPut("data/swipes.jsonl", text, swipesSha, `humor swipe ${swipes.length}`);
+    }
+    if (!r.ok) { dirty = true; return toast("保存に失敗しました。少ししてから再試行します"), scheduleSave(); }
+    swipesSha = (await r.json()).content.sha;
+  }).catch(() => { dirty = true; });
+  return saving;
+}
+addEventListener("beforeunload", e => { if (GH && dirty) e.preventDefault(); });
+
+const api = {
+  async swipe(rec) {
+    if (GH) { rec.at = stamp(); return scheduleSave(); }
+    await fetch("/api/swipe", { method: "POST", body: JSON.stringify(rec) });
+  },
+  async undo() {
+    if (GH) { const last = swipes.at(-1); if (last) scheduleSave(); return last; }
+    return (await fetch("/api/undo", { method: "POST" }).then(r => r.json())).undone;
+  },
+  async state() {
+    if (!GH) return fetch("/api/state").then(r => r.json());
+    const [today, sw, sha] = await Promise.all([ghRaw("data/today.json"), ghRaw("data/swipes.jsonl"), ghSha("data/swipes.jsonl")]);
+    if (!today.ok) throw new Error("今日のデッキがまだありません");
+    swipesSha = sha;
+    const s = await today.json();
+    s.swipes = sw.ok ? (await sw.text()).split("\n").filter(l => l.trim()).map(l => JSON.parse(l)) : [];
+    return s;
+  },
+};
+
+function askToken(msg) {
+  stage.innerHTML = `<form class="done" id="token"><div>${msg}<br>
+    <input name="t" type="password" placeholder="github_pat_..." autocomplete="off" style="margin-top:12px;width:min(320px,80vw);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+    <br><button style="margin-top:8px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--ink)">保存して開く</button>
+    <br><small>kabeuchi の Contents 読み書きだけを許可したトークン。このブラウザにだけ保存されます</small></div></form>`;
+  $("#token").onsubmit = e => {
+    e.preventDefault();
+    try { localStorage.setItem(TOKEN_KEY, e.target.t.value.trim()); } catch {}
+    token = e.target.t.value.trim();
+    start();
+  };
+}
+
+function start() {
+  if (GH && !token) return askToken("GitHub のトークンを入力してください");
+  api.state().then(s => {
+    posts = s.posts; swipes = s.swipes;
+    if (s.date) $("h1").textContent = `ユーモア・スワイプ ${s.date.slice(5).replace("-", "/")}`;
+    const done = new Set(swipes.map(x => x.id));
+    queue = posts.filter(p => !done.has(p.id));
+    render();
+  }).catch(e => { if (e.message !== "401") stage.innerHTML = `<div class="done">${esc(e.message)}</div>`; });
+}
+
+try { token = localStorage.getItem(TOKEN_KEY) || ""; } catch {}
+start();
+</script>
+</body>
+</html>
